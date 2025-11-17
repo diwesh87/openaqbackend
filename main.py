@@ -12,6 +12,7 @@ from data_service import (
     get_city_stations,
     get_heatmap_points,
 )
+import httpx
 from sample_data import SAMPLE_CITIES
 import pathlib
 
@@ -44,13 +45,26 @@ app.add_middleware(
 
 @app.get("/")
 async def read_root():
-    api_key_set = bool(os.getenv("OPENAQ_API_KEY", ""))
+    api_key = os.getenv("OPENAQ_API_KEY", "")
+    # Check if API key exists and is not empty (has reasonable length)
+    api_key_set = bool(api_key) and len(api_key.strip()) > 10
     use_sample = os.getenv("USE_SAMPLE_DATA", "false").lower() == "true"
+    
+    # Show masked API key for debugging (first 10 chars + last 4 chars)
+    api_key_preview = ""
+    if api_key:
+        if len(api_key) > 14:
+            api_key_preview = f"{api_key[:10]}...{api_key[-4:]}"
+        else:
+            api_key_preview = f"{api_key[:6]}...{api_key[-2:]}" if len(api_key) > 8 else "***"
+    
     return {
         "message": "OpenAQ Global Air Dashboard API",
         "version": "1.0.0",
         "config": {
             "api_key_configured": api_key_set,
+            "api_key_length": len(api_key) if api_key else 0,
+            "api_key_preview": api_key_preview,
             "use_sample_data": use_sample,
             "data_source": "sample" if (not api_key_set or use_sample) else "openaq",
         },
@@ -62,8 +76,70 @@ async def read_root():
             "/api/city/{city}/stations",
             "/api/heatmap",
             "/api/insights",
+            "/api/test-key",  # New endpoint to test API key
         ],
     }
+
+
+@app.get("/api/test-key")
+async def test_api_key():
+    """Test if the OpenAQ API key is working"""
+    api_key = os.getenv("OPENAQ_API_KEY", "")
+    
+    if not api_key or len(api_key.strip()) < 10:
+        return {
+            "status": "error",
+            "message": "API key not configured or too short",
+            "api_key_length": len(api_key) if api_key else 0,
+        }
+    
+    try:
+        # Try to make a simple API call to test the key
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {
+                "Accept": "application/json",
+                "X-API-Key": api_key,
+            }
+            # Try fetching countries as a simple test
+            response = await client.get(
+                "https://api.openaq.org/v3/countries",
+                headers=headers,
+                params={"limit": 1}
+            )
+            
+            if response.status_code == 200:
+                return {
+                    "status": "success",
+                    "message": "API key is valid and working",
+                    "api_key_length": len(api_key),
+                    "api_key_preview": f"{api_key[:10]}...{api_key[-4:]}",
+                    "test_response_status": response.status_code,
+                }
+            elif response.status_code == 401:
+                return {
+                    "status": "error",
+                    "message": "API key is invalid or unauthorized",
+                    "api_key_length": len(api_key),
+                    "api_key_preview": f"{api_key[:10]}...{api_key[-4:]}",
+                    "test_response_status": response.status_code,
+                    "error": "Unauthorized - check your API key",
+                }
+            else:
+                error_text = response.text[:200]
+                return {
+                    "status": "error",
+                    "message": f"API call failed with status {response.status_code}",
+                    "api_key_length": len(api_key),
+                    "api_key_preview": f"{api_key[:10]}...{api_key[-4:]}",
+                    "test_response_status": response.status_code,
+                    "error": error_text,
+                }
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": f"Error testing API key: {str(e)}",
+            "api_key_length": len(api_key) if api_key else 0,
+        }
 
 
 @app.get("/api/countries")
