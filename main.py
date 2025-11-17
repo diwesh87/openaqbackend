@@ -43,10 +43,17 @@ app.add_middleware(
 
 
 @app.get("/")
-def read_root():
+async def read_root():
+    api_key_set = bool(os.getenv("OPENAQ_API_KEY", ""))
+    use_sample = os.getenv("USE_SAMPLE_DATA", "false").lower() == "true"
     return {
         "message": "OpenAQ Global Air Dashboard API",
         "version": "1.0.0",
+        "config": {
+            "api_key_configured": api_key_set,
+            "use_sample_data": use_sample,
+            "data_source": "sample" if (not api_key_set or use_sample) else "openaq",
+        },
         "endpoints": [
             "/api/countries",
             "/api/cities",
