@@ -22,7 +22,8 @@ else:
 logger = logging.getLogger(__name__)
 
 OPENAQ_API_BASE = "https://api.openaq.org/v3"
-API_KEY = os.getenv("OPENAQ_API_KEY", "")
+# Strip whitespace and newlines from API key (common issue with environment variables)
+API_KEY = os.getenv("OPENAQ_API_KEY", "").strip()
 
 # Fallback to sample data if API fails
 USE_FALLBACK = os.getenv("USE_SAMPLE_DATA", "false").lower() == "true"

@@ -28,9 +28,10 @@ else:
 # Log environment status
 import logging
 logger = logging.getLogger(__name__)
-api_key = os.getenv("OPENAQ_API_KEY", "")
+# Strip whitespace and newlines from API key (common issue with environment variables)
+api_key = os.getenv("OPENAQ_API_KEY", "").strip()
 use_sample = os.getenv("USE_SAMPLE_DATA", "false").lower() == "true"
-logger.info(f"Environment check - API_KEY present: {bool(api_key)}, USE_SAMPLE_DATA: {use_sample}")
+logger.info(f"Environment check - API_KEY present: {bool(api_key)}, API_KEY length: {len(api_key)}, USE_SAMPLE_DATA: {use_sample}")
 
 app = FastAPI(title="OpenAQ Global Air Dashboard API")
 
@@ -45,9 +46,10 @@ app.add_middleware(
 
 @app.get("/")
 async def read_root():
-    api_key = os.getenv("OPENAQ_API_KEY", "")
+    # Strip whitespace and newlines from API key (common issue with environment variables)
+    api_key = os.getenv("OPENAQ_API_KEY", "").strip()
     # Check if API key exists and is not empty (has reasonable length)
-    api_key_set = bool(api_key) and len(api_key.strip()) > 10
+    api_key_set = bool(api_key) and len(api_key) > 10
     use_sample = os.getenv("USE_SAMPLE_DATA", "false").lower() == "true"
     
     # Show masked API key for debugging (first 10 chars + last 4 chars)
@@ -84,9 +86,10 @@ async def read_root():
 @app.get("/api/test-key")
 async def test_api_key():
     """Test if the OpenAQ API key is working"""
-    api_key = os.getenv("OPENAQ_API_KEY", "")
+    # Strip whitespace and newlines from API key (common issue with environment variables)
+    api_key = os.getenv("OPENAQ_API_KEY", "").strip()
     
-    if not api_key or len(api_key.strip()) < 10:
+    if not api_key or len(api_key) < 10:
         return {
             "status": "error",
             "message": "API key not configured or too short",
