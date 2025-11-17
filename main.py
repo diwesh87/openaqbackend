@@ -15,9 +15,21 @@ from data_service import (
 from sample_data import SAMPLE_CITIES
 import pathlib
 
-# Load .env file from backend directory
+# Load .env file from backend directory (for local development)
+# In production (Railway), environment variables are provided directly
 env_path = pathlib.Path(__file__).parent / '.env'
-load_dotenv(dotenv_path=env_path)
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    # In production, just load from environment (Railway provides these)
+    load_dotenv(override=False)
+
+# Log environment status
+import logging
+logger = logging.getLogger(__name__)
+api_key = os.getenv("OPENAQ_API_KEY", "")
+use_sample = os.getenv("USE_SAMPLE_DATA", "false").lower() == "true"
+logger.info(f"Environment check - API_KEY present: {bool(api_key)}, USE_SAMPLE_DATA: {use_sample}")
 
 app = FastAPI(title="OpenAQ Global Air Dashboard API")
 

@@ -10,9 +10,14 @@ import logging
 from dotenv import load_dotenv
 import pathlib
 
-# Load .env file from backend directory
+# Load .env file from backend directory (for local development)
+# In production (Railway), environment variables are provided directly
 env_path = pathlib.Path(__file__).parent / '.env'
-load_dotenv(dotenv_path=env_path)
+if env_path.exists():
+    load_dotenv(dotenv_path=env_path)
+else:
+    # In production, just load from environment (Railway provides these)
+    load_dotenv(override=False)
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +26,17 @@ API_KEY = os.getenv("OPENAQ_API_KEY", "")
 
 # Fallback to sample data if API fails
 USE_FALLBACK = os.getenv("USE_SAMPLE_DATA", "false").lower() == "true"
+
+# Log configuration status (for debugging)
+if API_KEY:
+    logger.info(f"OpenAQ API Key found: {API_KEY[:10]}... (length: {len(API_KEY)})")
+else:
+    logger.warning("OpenAQ API Key not found - will use sample data")
+    
+if USE_FALLBACK:
+    logger.warning("USE_SAMPLE_DATA is set to 'true' - will use sample data only")
+else:
+    logger.info("USE_SAMPLE_DATA is false - will attempt to use OpenAQ API")
 
 
 def get_headers() -> Dict[str, str]:
