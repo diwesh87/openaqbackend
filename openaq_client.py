@@ -81,59 +81,84 @@ async def fetch_locations(country_code: str, limit: int = 100) -> List[Dict[str,
     if not API_KEY or USE_FALLBACK:
         return []
     
+    # Try different parameter formats - OpenAQ API v3 might accept different formats
+    param_formats = [
+        {"countries": country_code},  # Format 1: 'countries'
+        {"countriesId": country_code},  # Format 2: 'countriesId' (camelCase)
+        {"countries_id": country_code},  # Format 3: 'countries_id' (snake_case)
+    ]
+    
+    async with httpx.AsyncClient(timeout=10.0) as client:
+        for param_format in param_formats:
+            try:
+                params = {
+                    **param_format,
+                    "limit": limit,
+                    "order_by": "lastUpdated",
+                    "sort": "desc"
+                }
+                
+                response = await client.get(
+                    f"{OPENAQ_API_BASE}/locations",
+                    headers=get_headers(),
+                    params=params
+                )
+                
+                # If successful, process the data
+                if response.status_code == 200:
+                    data = response.json()
+                    break
+                else:
+                    # Log error but try next format
+                    error_text = response.text[:500]
+                    logger.warning(f"OpenAQ API error for locations (country={country_code}, format={list(param_format.keys())[0]}): Status {response.status_code}, Response: {error_text}")
+                    continue
+            except Exception as e:
+                logger.warning(f"Error trying parameter format {list(param_format.keys())[0]}: {e}")
+                continue
+        else:
+            # All formats failed
+            logger.error(f"All parameter formats failed for country {country_code}")
+            return []
+    
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            params = {
-                "countriesId": country_code,  # Fixed: use countriesId instead of countries_id
-                "limit": limit,
-                "order_by": "lastUpdated",
-                "sort": "desc"
-            }
+        locations = []
+        for loc in data.get("results", []):
+            # Use the location's city field if available, otherwise extract from name
+            city_name = loc.get("city") or loc.get("name", "").split(",")[0].strip()
+            if not city_name:
+                city_name = loc.get("name", "Unknown")
             
-            response = await client.get(
-                f"{OPENAQ_API_BASE}/locations",
-                headers=get_headers(),
-                params=params
-            )
-            response.raise_for_status()
-            data = response.json()
+            # Get coordinates - OpenAQ API v3 uses 'coordinates' object
+            coordinates = loc.get("coordinates", {})
+            lat = coordinates.get("latitude") or coordinates.get("lat", 0)
+            lon = coordinates.get("longitude") or coordinates.get("lon", 0)
             
-            locations = []
-            for loc in data.get("results", []):
-                # Extract city name (use name or first part of name)
-                city_name = loc.get("name", "").split(",")[0].strip()
-                if not city_name:
-                    city_name = loc.get("name", "Unknown")
-                
-                # Get coordinates
-                coordinates = loc.get("coordinates", {})
-                lat = coordinates.get("latitude", 0)
-                lon = coordinates.get("longitude", 0)
-                
-                # Get latest measurements
-                parameters = loc.get("parameters", [])
-                measurements = {}
-                for param in parameters:
-                    param_name = param.get("name", "").lower()
-                    latest = param.get("lastValue", 0)
-                    measurements[param_name] = latest
-                
-                locations.append({
-                    "id": loc.get("id", ""),
-                    "city": city_name,
-                    "name": loc.get("name", ""),
-                    "lat": lat,
-                    "lon": lon,
-                    "pm25": measurements.get("pm25", 0),
-                    "pm10": measurements.get("pm10", 0),
-                    "no2": measurements.get("no2", 0),
-                    "o3": measurements.get("o3", 0),
-                    "co": measurements.get("co", 0),
-                    "so2": measurements.get("so2", 0),
-                    "lastUpdated": loc.get("lastUpdated", datetime.now().isoformat()),
-                })
+            # Get latest measurements from parameters array
+            parameters = loc.get("parameters", [])
+            measurements = {}
+            for param in parameters:
+                param_name = param.get("name", "").lower()
+                # Try different possible fields for the value
+                latest = param.get("lastValue") or param.get("value") or param.get("last_value", 0)
+                measurements[param_name] = latest
             
-            return locations
+            locations.append({
+                "id": loc.get("id", ""),
+                "city": city_name,
+                "name": loc.get("name", ""),
+                "lat": lat,
+                "lon": lon,
+                "pm25": measurements.get("pm25", 0),
+                "pm10": measurements.get("pm10", 0),
+                "no2": measurements.get("no2", 0),
+                "o3": measurements.get("o3", 0),
+                "co": measurements.get("co", 0),
+                "so2": measurements.get("so2", 0),
+                "lastUpdated": loc.get("lastUpdated") or loc.get("last_updated") or datetime.now().isoformat(),
+            })
+        
+        return locations
     except Exception as e:
         logger.error(f"Error fetching locations for {country_code}: {e}")
         return []
@@ -151,32 +176,42 @@ async def fetch_measurements(
     
     try:
         async with httpx.AsyncClient(timeout=15.0) as client:
-            # Calculate date range
-            end_date = datetime.now()
+            # Calculate date range - OpenAQ API v3 expects ISO 8601 format with timezone
+            end_date = datetime.utcnow()
             start_date = end_date - timedelta(days=days)
             
+            # Format dates as ISO 8601 with 'Z' suffix for UTC
             params = {
-                "date_from": start_date.isoformat(),
-                "date_to": end_date.isoformat(),
+                "date_from": start_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
+                "date_to": end_date.strftime("%Y-%m-%dT%H:%M:%SZ"),
                 "limit": 1000,
                 "order_by": "datetime",
                 "sort": "asc"
             }
             
             if location_id:
-                params["locations_id"] = location_id
+                params["locations"] = location_id  # Try 'locations' instead of 'locations_id'
             elif city and country_code:
                 # We'll need to find location IDs first
                 locations = await fetch_locations(country_code, limit=200)
                 matching_locs = [loc for loc in locations if city.lower() in loc.get("city", "").lower()]
                 if matching_locs:
-                    params["locations_id"] = matching_locs[0].get("id")
+                    params["locations"] = matching_locs[0].get("id")
+                elif country_code:
+                    # If no matching city, try filtering by country
+                    params["countries"] = country_code
             
             response = await client.get(
                 f"{OPENAQ_API_BASE}/measurements",
                 headers=get_headers(),
                 params=params
             )
+            
+            # Log error details if request fails
+            if response.status_code != 200:
+                error_text = response.text[:500]  # First 500 chars of error
+                logger.error(f"OpenAQ API error for measurements: Status {response.status_code}, Response: {error_text}")
+            
             response.raise_for_status()
             data = response.json()
             
@@ -184,15 +219,35 @@ async def fetch_measurements(
             measurements_by_date: Dict[str, Dict[str, Any]] = {}
             
             for measurement in data.get("results", []):
-                date_str = measurement.get("date", {}).get("utc", "")
+                # OpenAQ API v3 might use different date field structures
+                date_str = None
+                date_obj = measurement.get("date", {})
+                if isinstance(date_obj, dict):
+                    date_str = date_obj.get("utc") or date_obj.get("local")
+                elif isinstance(date_obj, str):
+                    date_str = date_obj
+                else:
+                    # Try datetime field directly
+                    date_str = measurement.get("datetime") or measurement.get("dateTime")
+                
                 if not date_str:
                     continue
                 
                 # Extract date (YYYY-MM-DD)
                 try:
-                    date_obj = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
-                    date_key = date_obj.strftime("%Y-%m-%d")
-                except:
+                    # Handle different date formats
+                    if isinstance(date_str, str):
+                        # Remove timezone info and parse
+                        date_str_clean = date_str.replace("Z", "+00:00").split("+")[0].split("T")[0]
+                        if len(date_str_clean) == 10:  # YYYY-MM-DD format
+                            date_key = date_str_clean
+                        else:
+                            date_obj_parsed = datetime.fromisoformat(date_str.replace("Z", "+00:00"))
+                            date_key = date_obj_parsed.strftime("%Y-%m-%d")
+                    else:
+                        continue
+                except Exception as e:
+                    logger.debug(f"Error parsing date {date_str}: {e}")
                     continue
                 
                 if date_key not in measurements_by_date:
@@ -206,7 +261,13 @@ async def fetch_measurements(
                         "so2": None,
                     }
                 
-                param_name = measurement.get("parameter", {}).get("name", "").lower()
+                # Get parameter name - could be nested or direct
+                param_obj = measurement.get("parameter", {})
+                if isinstance(param_obj, dict):
+                    param_name = param_obj.get("name", "").lower()
+                else:
+                    param_name = str(param_obj).lower()
+                
                 value = measurement.get("value", 0)
                 
                 if param_name in measurements_by_date[date_key]:
