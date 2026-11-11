@@ -366,9 +366,10 @@ python --version  # Should be 3.9+
    and the browser will report a CORS error (Railway's 404 has no CORS headers).
 2. Redeploy the backend on Railway, then set Vercel `VITE_API_BASE_URL` to the
    new public URL and redeploy the frontend.
-3. Allowed origins include `http://localhost:5173` and
-   `https://openaqfrontend.vercel.app`. Add more via Railway env `CORS_ORIGINS`
-   (comma-separated), e.g. `https://my-preview.vercel.app`.
+3. Allowed origins include `http://localhost:5173`,
+   `https://openaqfrontend.vercel.app`, and `https://openaq.diweshsaxena.com`.
+   Add more via Railway env `CORS_ORIGINS` (comma-separated),
+   e.g. `https://my-preview.vercel.app`.
 4. Check browser console / Network tab for the real HTTP status (404/502 vs CORS).
 
 ## Development Tips

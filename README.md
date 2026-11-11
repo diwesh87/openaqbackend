@@ -221,7 +221,7 @@ curl http://localhost:8000/api/city/New%20Delhi/summary?country=IN
 
 Allowed origins (see `main.py`):
 - `http://localhost:5173` / `http://localhost:3000` (local Vite/dev)
-- `https://openaqfrontend.vercel.app` (production frontend)
+- `https://openaqfrontend.vercel.app` / `https://openaq.diweshsaxena.com` (production frontend)
 - Extra origins via env `CORS_ORIGINS` (comma-separated)
 
 ## 📊 Data Flow
