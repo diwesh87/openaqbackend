@@ -219,9 +219,10 @@ curl http://localhost:8000/api/city/New%20Delhi/summary?country=IN
 
 ## 🔒 CORS Configuration
 
-The API is configured to allow requests from:
-- `http://localhost:5173` (Vite dev server)
-- Your Vercel deployment URL (update in `main.py` if needed)
+Allowed origins (see `main.py`):
+- `http://localhost:5173` / `http://localhost:3000` (local Vite/dev)
+- `https://openaqfrontend.vercel.app` (production frontend)
+- Extra origins via env `CORS_ORIGINS` (comma-separated)
 
 ## 📊 Data Flow
 

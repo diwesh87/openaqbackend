@@ -361,10 +361,15 @@ python --version  # Should be 3.9+
 **Error**: CORS policy blocking requests
 
 **Solution**:
-- The backend is configured to allow all origins
-- Check that backend is running
-- Verify frontend is using correct API URL
-- Check browser console for specific CORS errors
+1. Confirm the Railway backend is actually up — open the API URL in a browser.
+   If you see `{"message":"Application not found"}`, the service is down/deleted
+   and the browser will report a CORS error (Railway's 404 has no CORS headers).
+2. Redeploy the backend on Railway, then set Vercel `VITE_API_BASE_URL` to the
+   new public URL and redeploy the frontend.
+3. Allowed origins include `http://localhost:5173` and
+   `https://openaqfrontend.vercel.app`. Add more via Railway env `CORS_ORIGINS`
+   (comma-separated), e.g. `https://my-preview.vercel.app`.
+4. Check browser console / Network tab for the real HTTP status (404/502 vs CORS).
 
 ## Development Tips
 

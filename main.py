@@ -35,9 +35,23 @@ logger.info(f"Environment check - API_KEY present: {bool(api_key)}, API_KEY leng
 
 app = FastAPI(title="OpenAQ Global Air Dashboard API")
 
+# Explicit origins required when credentials are enabled (* is rejected by browsers)
+default_origins = [
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://127.0.0.1:5173",
+    "https://openaqfrontend.vercel.app",
+]
+extra_origins = [
+    origin.strip()
+    for origin in os.getenv("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+allow_origins = list(dict.fromkeys(default_origins + extra_origins))
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
